@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Coffee Shop — Live Orders Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    // Tailwind config for on-the-fly theming
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#eff6ff', 100: '#dbeafe', 200: '#bfdbfe', 300: '#93c5fd',
+              400: '#60a5fa', 500: '#3b82f6', 600: '#2563eb', 700: '#1d4ed8',
+              800: '#1e40af', 900: '#1e3a8a'
+            }
+          },
+          boxShadow: {
+            soft: '0 10px 25px -10px rgba(0,0,0,0.15)'
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    /* Minimal, accessible scrollbar (WebKit only fallback) */
+    *::-webkit-scrollbar { width: 10px; height: 10px; }
+    *::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 8px; }
+    *::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen">
+  <!-- Header -->
+  <header class="sticky top-0 z-30 bg-white/80 backdrop-blur border-b border-slate-200">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-brand-600 text-white grid place-items-center font-bold shadow-soft">☕</div>
+        <div>
+          <h1 class="text-xl sm:text-2xl font-semibold leading-tight">Live Orders Dashboard</h1>
+          <p class="text-sm text-slate-500">Track, manage, and optimize orders in real time</p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <!-- Auto-refresh controls -->
+        <label class="text-sm text-slate-600" for="refreshInterval">Auto-refresh:</label>
+        <select id="refreshInterval" class="text-sm rounded-lg border-slate-300 focus:ring-brand-500 focus:border-brand-500">
+          <option value="0">Off</option>
+          <option value="5">Every 5s</option>
+          <option value="10">Every 10s</option>
+          <option value="30">Every 30s</option>
+          <option value="60">Every 60s</option>
+        </select>
+        <button id="btnStep" class="hidden sm:inline-flex px-3 py-2 text-sm rounded-lg bg-slate-100 hover:bg-slate-200">Step once</button>
+        <button id="btnAddDemo" class="px-3 sm:px-4 py-2 text-sm rounded-lg bg-brand-600 text-white hover:bg-brand-700 shadow-soft">Add Demo Order</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Summary Bar -->
+  <section class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div class="p-4 rounded-2xl bg-white border border-slate-200 shadow-soft">
+        <div class="text-sm text-slate-500">Total Orders (Today)</div>
+        <div id="metricTotal" class="mt-1 text-2xl font-semibold">0</div>
+      </div>
+      <div class="p-4 rounded-2xl bg-white border border-slate-200 shadow-soft">
+        <div class="text-sm text-slate-500">Ready / Pending</div>
+        <div class="mt-1 text-2xl font-semibold"><span id="metricReady">0</span> / <span id="metricPending">0</span></div>
+      </div>
+      <div class="p-4 rounded-2xl bg-white border border-slate-200 shadow-soft">
+        <div class="text-sm text-slate-500">Revenue (₹)</div>
+        <div id="metricRevenue" class="mt-1 text-2xl font-semibold">0.00</div>
+      </div>
+      <div class="p-4 rounded-2xl bg-white border border-slate-200 shadow-soft">
+        <div class="text-sm text-slate-500">Last Update</div>
+        <div id="lastUpdate" class="mt-1 text-2xl font-semibold">—</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Main Content -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-24 grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Orders Grid -->
+    <section class="lg:col-span-2">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-lg font-semibold">Orders</h2>
+        <div class="flex items-center gap-2">
+          <label class="text-sm text-slate-600" for="filterStatus">Filter:</label>
+          <select id="filterStatus" class="text-sm rounded-lg border-slate-300 focus:ring-brand-500 focus:border-brand-500">
+            <option value="all">All</option>
+            <option value="waiting">Waiting</option>
+            <option value="in_progress">In Progress</option>
+            <option value="ready">Ready</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+        </div>
+      </div>
+      <div id="ordersGrid" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4"></div>
+    </section>
+
+    <!-- Side Panel: Alerts & Smart Assistant -->
+    <aside class="space-y-6">
+      <!-- Alerts Panel -->
+      <div class="p-4 rounded-2xl bg-white border border-slate-200 shadow-soft">
+        <div class="flex items-center justify-between">
+          <h3 class="text-lg font-semibold flex items-center gap-2">Alerts <span id="alertCount" class="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">0</span></h3>
+          <button id="btnClearAlerts" class="text-xs px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200">Clear</button>
+        </div>
+        <ul id="alertsList" class="mt-3 space-y-2 max-h-80 overflow-auto text-sm"></ul>
+      </div>
+
+      <!-- Smart Assistant -->
+      <div class="p-4 rounded-2xl bg-white border border-slate-200 shadow-soft">
+        <div class="flex items-center justify-between">
+          <h3 class="text-lg font-semibold">Smart Assistant</h3>
+          <button id="btnRefreshSuggestions" class="text-xs px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200">Refresh</button>
+        </div>
+        <ul id="suggestionsList" class="mt-3 space-y-2 text-sm"></ul>
+      </div>
+    </aside>
+  </main>
+
+  <footer class="fixed bottom-0 inset-x-0 bg-white/90 backdrop-blur border-t border-slate-200">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 text-xs text-slate-500 flex items-center justify-between">
+      <div>Tip: Use <kbd class="px-1 rounded border">A</kbd> to add a demo order, <kbd class="px-1 rounded border">N</kbd> to advance statuses.</div>
+      <div id="orderCountByStatus" class="hidden sm:block"></div>
+    </div>
+  </footer>
+
+  <template id="orderCardTemplate">
+    <div class="order-card p-4 rounded-2xl border shadow-soft bg-white border-slate-200 flex flex-col gap-3">
+      <div class="flex items-start justify-between gap-2">
+        <div>
+          <h4 class="text-base font-semibold"><span class="customerName">—</span> <span class="text-xs text-slate-400">(<span class="orderId">#000</span>)</span></h4>
+          <div class="text-xs text-slate-500">Placed <span class="timeAgo">0m</span> ago • <span class="timestamp">—</span></div>
+        </div>
+        <span class="statusPill text-xs px-2 py-1 rounded-full bg-slate-100 text-slate-700">Waiting</span>
+      </div>
+
+      <ul class="itemsList text-sm text-slate-700 space-y-1"></ul>
+
+      <div class="flex items-center justify-between text-sm">
+        <div class="text-slate-500">Payment: <span class="payment"></span></div>
+        <div class="font-semibold">₹<span class="amount">0.00</span></div>
+      </div>
+
+      <div class="flex items-center gap-2 mt-1">
+        <select class="statusSelect flex-1 text-sm rounded-lg border-slate-300 focus:ring-brand-500 focus:border-brand-500">
+          <option value="waiting">Waiting</option>
+          <option value="in_progress">In Progress</option>
+          <option value="ready">Ready</option>
+          <option value="cancelled">Cancelled</option>
+        </select>
+        <button class="btnNext px-3 py-2 text-sm rounded-lg bg-slate-100 hover:bg-slate-200">Next</button>
+        <button class="btnCancel px-3 py-2 text-sm rounded-lg bg-rose-600 text-white hover:bg-rose-700">Cancel</button>
+      </div>
+    </div>
+  </template>
+
+  <script>
+    // ---- Utilities ----
+    const fmt = new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const timeFmt = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' });
+    const now = () => new Date();
+    const uid = () => Math.random().toString(36).slice(2, 8).toUpperCase();
+
+    function minutesBetween(a, b) {
+      return Math.floor((b - a) / 60000);
+    }
+
+    function timeAgo(ts) {
+      const mins = minutesBetween(new Date(ts), now());
+      if (mins < 1) return 'just now';
+      if (mins < 60) return mins + 'm';
+      const hrs = Math.floor(mins / 60);
+      const rem = mins % 60;
+      return `${hrs}h ${rem}m`;
+    }
+
+    // ---- Demo Data ----
+    const NAMES = ['Aarav','Diya','Isha','Kabir','Meera','Rahul','Saanvi','Vivaan','Ananya','Ishan','Zara','Arjun'];
+    const DRINKS = [
+      { name: 'Espresso', price: 120, cat: 'drink' },
+      { name: 'Americano', price: 150, cat: 'drink' },
+      { name: 'Cappuccino', price: 180, cat: 'drink' },
+      { name: 'Latte', price: 200, cat: 'drink' },
+      { name: 'Mocha', price: 220, cat: 'drink' },
+      { name: 'Cold Brew', price: 180, cat: 'drink' }
+    ];
+    const PASTRIES = [
+      { name: 'Croissant', price: 90, cat: 'pastry' },
+      { name: 'Chocolate Croissant', price: 110, cat: 'pastry' },
+      { name: 'Blueberry Muffin', price: 85, cat: 'pastry' },
+      { name: 'Banana Bread', price: 95, cat: 'pastry' }
+    ];
+    const SNACKS = [
+      { name: 'Veg Sandwich', price: 140, cat: 'snack' },
+      { name: 'Paneer Wrap', price: 160, cat: 'snack' },
+      { name: 'Chicken Roll', price: 170, cat: 'snack' }
+    ];
+    const PAYMENT = ['Cash','UPI','Card'];
+
+    const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+    const randInt = (a, b) => Math.floor(Math.random() * (b - a + 1)) + a;
+
+    function makeDemoOrder() {
+      const id = uid();
+      const items = [];
+      const groups = [DRINKS, PASTRIES, SNACKS];
+      const bundleCount = randInt(1, 3);
+      for (let i = 0; i < bundleCount; i++) {
+        const pool = pick(groups);
+        const item = { ...pick(pool) };
+        item.qty = randInt(1, Math.random() < 0.2 ? 6 : 3);
+        items.push(item);
+      }
+      // Occasionally large group order
+      if (Math.random() < 0.15) {
+        const extra = { ...pick(DRINKS), qty: randInt(6, 10) };
+        items.push(extra);
+      }
+      return {
+        id,
+        customer: pick(NAMES),
+        items,
+        status: 'waiting', // waiting | in_progress | ready | cancelled
+        payment: pick(PAYMENT),
+        placedAt: new Date(Date.now() - randInt(0, 18) * 60 * 1000 - randInt(0, 59) * 1000),
+      };
+    }
+
+    function orderTotal(order) {
+      return order.items.reduce((s, it) => s + (it.price * (it.qty || 1)), 0);
+    }
+
+    function orderItemCount(order) {
+      return order.items.reduce((s, it) => s + (it.qty || 1), 0);
+    }
+
+    function nextStatus(status) {
+      return status === 'waiting' ? 'in_progress' : status === 'in_progress' ? 'ready' : status;
+    }
+
+    function statusLabel(s) {
+      return ({ waiting: 'Waiting', in_progress: 'In Progress', ready: 'Ready', cancelled: 'Cancelled' })[s] || s;
+    }
+
+    function statusStyles(s) {
+      return ({
+        waiting: 'bg-amber-100 text-amber-800',
+        in_progress: 'bg-sky-100 text-sky-700',
+        ready: 'bg-emerald-100 text-emerald-700',
+        cancelled: 'bg-rose-100 text-rose-700 line-through'
+      })[s] || 'bg-slate-100 text-slate-700';
+    }
+
+    // ---- App State ----
+    const state = {
+      orders: [],
+      intervalSec: 0,
+      tickHandle: null,
+      filter: 'all',
+      alerts: []
+    };
+
+    // ---- Rendering ----
+    const els = {
+      grid: document.getElementById('ordersGrid'),
+      tpl: document.getElementById('orderCardTemplate'),
+      metricTotal: document.getElementById('metricTotal'),
+      metricReady: document.getElementById('metricReady'),
+      metricPending: document.getElementById('metricPending'),
+      metricRevenue: document.getElementById('metricRevenue'),
+      lastUpdate: document.getElementById('lastUpdate'),
+      alertCount: document.getElementById('alertCount'),
+      alertsList: document.getElementById('alertsList'),
+      orderCountByStatus: document.getElementById('orderCountByStatus'),
+      suggestionsList: document.getElementById('suggestionsList')
+    };
+
+    function render() {
+      // Sort by placed time (oldest first)
+      const ordersToShow = state.orders
+        .filter(o => state.filter === 'all' ? true : o.status === state.filter)
+        .sort((a,b) => new Date(a.placedAt) - new Date(b.placedAt));
+
+      els.grid.innerHTML = '';
+
+      for (const o of ordersToShow) {
+        const node = els.tpl.content.firstElementChild.cloneNode(true);
+        node.dataset.id = o.id;
+        node.querySelector('.customerName').textContent = o.customer;
+        node.querySelector('.orderId').textContent = o.id;
+        node.querySelector('.timeAgo').textContent = timeAgo(o.placedAt);
+        node.querySelector('.timestamp').textContent = timeFmt.format(new Date(o.placedAt));
+
+        const itemsUl = node.querySelector('.itemsList');
+        itemsUl.innerHTML = '';
+        for (const it of o.items) {
+          const li = document.createElement('li');
+          li.className = 'flex items-center justify-between gap-2';
+          li.innerHTML = `<span>${it.name} <span class="text-xs text-slate-400">×${it.qty || 1}</span></span><span class="text-slate-500">₹${fmt.format(it.price * (it.qty || 1))}</span>`;
+          itemsUl.appendChild(li);
+        }
+
+        const amt = orderTotal(o);
+        node.querySelector('.amount').textContent = fmt.format(amt);
+        node.querySelector('.payment').textContent = o.payment;
+
+        const pill = node.querySelector('.statusPill');
+        pill.textContent = statusLabel(o.status);
+        pill.className = `statusPill text-xs px-2 py-1 rounded-full ${statusStyles(o.status)}`;
+
+        const select = node.querySelector('.statusSelect');
+        select.value = o.status;
+        select.addEventListener('change', (e) => {
+          o.status = e.target.value;
+          render();
+          computeAlerts();
+          computeMetrics();
+          computeSuggestions();
+        });
+
+        const btnNext = node.querySelector('.btnNext');
+        btnNext.addEventListener('click', () => {
+          const ns = nextStatus(o.status);
+          o.status = ns;
+          render();
+          computeAlerts();
+          computeMetrics();
+          computeSuggestions();
+        });
+
+        const btnCancel = node.querySelector('.btnCancel');
+        btnCancel.addEventListener('click', () => {
+          if (o.status === 'ready') { alert('This order is already ready.'); return; }
+          if (confirm(`Cancel order ${o.id} for ${o.customer}?`)) {
+            o.status = 'cancelled';
+            render();
+            computeAlerts();
+            computeMetrics();
+            computeSuggestions();
+          }
+        });
+
+        els.grid.appendChild(node);
+      }
+
+      computeMetrics();
+      els.lastUpdate.textContent = timeFmt.format(new Date());
+      // Footer quick counts
+      const counts = countByStatus();
+      els.orderCountByStatus.textContent = `Waiting: ${counts.waiting} • In Progress: ${counts.in_progress} • Ready: ${counts.ready} • Cancelled: ${counts.cancelled}`;
+    }
+
+    function countByStatus() {
+      return state.orders.reduce((acc, o) => { acc[o.status] = (acc[o.status]||0)+1; return acc; }, { waiting:0, in_progress:0, ready:0, cancelled:0 });
+    }
+
+    function computeMetrics() {
+      const totalOrders = state.orders.length;
+      const ready = state.orders.filter(o => o.status === 'ready').length;
+      const pending = state.orders.filter(o => o.status !== 'ready' && o.status !== 'cancelled').length;
+      const revenue = state.orders.filter(o => o.status !== 'cancelled')
+        .reduce((s, o) => s + orderTotal(o), 0);
+      els.metricTotal.textContent = totalOrders;
+      els.metricReady.textContent = ready;
+      els.metricPending.textContent = pending;
+      els.metricRevenue.textContent = fmt.format(revenue);
+    }
+
+    function pushAlert(text, kind='info') {
+      const li = document.createElement('li');
+      const styles = kind === 'danger' ? 'bg-rose-50 text-rose-700 border-rose-200' : kind === 'warn' ? 'bg-amber-50 text-amber-800 border-amber-200' : 'bg-sky-50 text-sky-700 border-sky-200';
+      li.className = `p-3 rounded-xl border ${styles}`;
+      li.textContent = text;
+      els.alertsList.prepend(li);
+      const cnt = els.alertsList.querySelectorAll('li').length;
+      els.alertCount.textContent = cnt;
+    }
+
+    function computeAlerts() {
+      els.alertsList.innerHTML = '';
+      const nowTs = now();
+      let cnt = 0;
+      for (const o of state.orders) {
+        const mins = minutesBetween(new Date(o.placedAt), nowTs);
+        if (o.status === 'waiting' && mins > 10) { pushAlert(`Order ${o.id} (${o.customer}) waiting ${mins}m.`, 'warn'); cnt++; }
+        if (orderItemCount(o) >= 6 && o.status !== 'cancelled') { pushAlert(`Large order ${o.id}: ${orderItemCount(o)} items.`, 'info'); cnt++; }
+        if (o.status === 'cancelled') { pushAlert(`Order ${o.id} was cancelled.`, 'danger'); cnt++; }
+      }
+      els.alertCount.textContent = cnt;
+    }
+
+    function computeSuggestions() {
+      els.suggestionsList.innerHTML = '';
+      const addSug = (t) => {
+        const li = document.createElement('li');
+        li.className = 'p-3 rounded-xl border bg-white text-slate-700';
+        li.textContent = t;
+        els.suggestionsList.appendChild(li);
+      };
+
+      // High demand items
+      const demand = {};
+      for (const o of state.orders) {
+        if (o.status === 'cancelled') continue;
+        for (const it of o.items) {
+          demand[it.name] = (demand[it.name] || 0) + (it.qty || 1);
+        }
+      }
+      const top = Object.entries(demand).sort((a,b)=>b[1]-a[1]).slice(0,3);
+      if (top.length) addSug(`Hot items right now: ${top.map(([n,c])=>`${n} (${c})`).join(', ')}.`);
+
+      // Queue load
+      const pending = state.orders.filter(o => o.status === 'waiting' || o.status === 'in_progress');
+      if (pending.length >= 8) addSug(`High queue load (${pending.length} pending). Consider calling extra barista to the station.`);
+      if (pending.filter(o=>o.items.some(it=>/Croissant/i.test(it.name))).length >= 4) addSug('Consider prepping more croissants — 4+ orders in queue.');
+
+      // Slow orders
+      const slow = state.orders.filter(o => o.status !== 'ready' && o.status !== 'cancelled' && minutesBetween(new Date(o.placedAt), now()) > 12);
+      if (slow.length) addSug(`${slow.length} orders running slow (>12m). Prioritize oldest tickets first.`);
+
+      // Supply hint example
+      const muffins = demand['Blueberry Muffin'] || 0;
+      if (muffins >= 6) addSug('Blueberry Muffins trending (6+ ordered). Prep another tray.');
+
+      if (!els.suggestionsList.children.length) addSug('All good! Work-in-progress flow looks balanced. Keep it up.');
+    }
+
+    // ---- Auto-Progress Engine ----
+    function stepProgress() {
+      // Advance some orders based on age; do not change cancelled or ready
+      const t = now();
+      for (const o of state.orders) {
+        if (o.status === 'cancelled' || o.status === 'ready') continue;
+        const age = minutesBetween(new Date(o.placedAt), t);
+        const p = Math.min(0.7, 0.2 + age / 50); // more likely to move as it gets older
+        if (Math.random() < p) {
+          o.status = nextStatus(o.status);
+        }
+      }
+      render();
+      computeAlerts();
+      computeSuggestions();
+    }
+
+    function setIntervalSec(sec) {
+      state.intervalSec = sec;
+      if (state.tickHandle) { clearInterval(state.tickHandle); state.tickHandle = null; }
+      if (sec > 0) {
+        state.tickHandle = setInterval(stepProgress, sec * 1000);
+      }
+    }
+
+    // ---- Event Wiring ----
+    window.addEventListener('DOMContentLoaded', () => {
+      // Seed with a few demo orders
+      for (let i = 0; i < 6; i++) state.orders.push(makeDemoOrder());
+      render();
+      computeAlerts();
+      computeSuggestions();
+
+      document.getElementById('btnAddDemo').addEventListener('click', () => {
+        state.orders.push(makeDemoOrder());
+        render();
+        computeAlerts();
+        computeSuggestions();
+      });
+
+      document.getElementById('refreshInterval').addEventListener('change', (e) => {
+        setIntervalSec(parseInt(e.target.value, 10));
+      });
+
+      document.getElementById('btnStep').addEventListener('click', stepProgress);
+
+      document.getElementById('filterStatus').addEventListener('change', (e) => {
+        state.filter = e.target.value;
+        render();
+      });
+
+      document.getElementById('btnClearAlerts').addEventListener('click', () => {
+        els.alertsList.innerHTML = '';
+        els.alertCount.textContent = '0';
+      });
+
+      document.getElementById('btnRefreshSuggestions').addEventListener('click', computeSuggestions);
+
+      // Keyboard shortcuts
+      window.addEventListener('keydown', (e) => {
+        if (e.key.toLowerCase() === 'a') {
+          state.orders.push(makeDemoOrder());
+          render();
+          computeAlerts();
+          computeSuggestions();
+        }
+        if (e.key.toLowerCase() === 'n') {
+          stepProgress();
+        }
+      });
+    });
+  </script>
+</body>
+</html>
